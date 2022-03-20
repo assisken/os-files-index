@@ -1,0 +1,15 @@
+[package]
+name = "lab4"
+version = "0.0.1"
+edition = "2021"
+
+[dependencies]
+csv = "1.1.6"
+serde = { version = "1.0.136", features = ["derive"] }
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "z"
+panic = "abort"
+strip = true
