@@ -1,40 +1,38 @@
 use serde::{Deserialize, Serialize};
 
 #[allow(non_snake_case)]
-#[derive(Debug, Deserialize)]
-pub struct Book {
-    pub bookId: String,
-    pub title: String,
-    pub series: String,
-    pub author: String,
-    pub rating: String,
-    pub description: String,
-    pub language: String,
-    pub isbn: String,
-    pub genres: String,
-    pub characters: String,
-    pub bookFormat: String,
-    pub edition: String,
-    pub pages: String,
-    pub publisher: String,
-    pub publishDate: String,
-    pub firstPublishDate: String,
-    pub awards: String,
-    pub numRatings: String,
-    pub ratingsByStars: String,
-    pub likedPercent: String,
-    pub setting: String,
-    pub coverImg: String,
-    pub bbeScore: String,
-    pub bbeVotes: String,
-    pub price: String,
-}
-
-#[allow(non_snake_case)]
-#[derive(Debug, Serialize, Deserialize)]
-pub struct IndexRecord {
+#[derive(Deserialize, Serialize)]
+pub struct IndexElement {
     pub bookId: String,
     pub offset: u64,
 }
 
-pub type Index = Vec<IndexRecord>;
+#[allow(non_snake_case, dead_code)]
+#[derive(Debug, Deserialize)]
+pub struct Book {
+    pub bookId: String,
+    title: String,
+    series: String,
+    author: String,
+    rating: String,
+    description: String,
+    language: String,
+    isbn: String,
+    genres: String,
+    characters: String,
+    bookFormat: String,
+    edition: String,
+    pages: String,
+    publisher: String,
+    publishDate: String,
+    firstPublishDate: String,
+    awards: String,
+    numRatings: String,
+    ratingsByStars: String,
+    likedPercent: String,
+    setting: String,
+    coverImg: String,
+    bbeScore: String,
+    bbeVotes: String,
+    price: String,
+}

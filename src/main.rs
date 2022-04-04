@@ -1,108 +1,77 @@
-use csv::Position;
-use std::env;
-use std::error::Error;
-use std::fs::File;
-use std::io::{BufReader, BufWriter};
-use std::time::Instant;
-use types::{Index, IndexRecord};
+use std::{env, error::Error, time::Instant};
 
-use crate::types::Book;
+use csv::Position;
+use types::{Book, IndexElement};
 
 mod types;
 
-fn build_index_from_data() -> Result<Index, Box<dyn Error>> {
-    let file = File::open("books.csv")?;
-    let buffer = BufReader::new(file);
-    let mut reader = csv::Reader::from_reader(buffer);
-    let mut raw_record = csv::StringRecord::new();
-    let headers = reader.headers()?.clone();
+const BOOKS_FILE_NAME: &str = "books.csv";
+const INDEX_FILE_NAME: &str = "index.csv";
 
-    let mut index = Vec::new();
-    let mut start_position = 0;
+fn measure_and_print(
+    func: &dyn Fn(String, u64) -> Result<Book, Box<dyn Error>>,
+    book_id: String,
+    offset: u64,
+) -> Result<(), Box<dyn Error>> {
+    let now = Instant::now();
+    func(book_id, offset)?;
 
-    while reader.read_record(&mut raw_record)? {
-        let book: Book = raw_record.deserialize(Some(&headers))?;
-        let index_record = IndexRecord {
-            offset: start_position,
-            bookId: book.bookId,
-        };
-
-        index.push(index_record);
-        start_position = reader.position().byte();
-    }
-
-    Ok(index)
+    println!("{} OFFSET: took {} nanos", offset, now.elapsed().as_nanos());
+    return Ok(());
 }
 
-fn save_index() -> Result<(), Box<dyn Error>> {
-    let index = build_index_from_data().unwrap();
+fn find_book(book_id: String, offset: u64) -> Result<Book, Box<dyn Error>> {
+    let mut reader = csv::Reader::from_path(BOOKS_FILE_NAME)?;
 
-    let file = File::create("index.csv")?;
-    let buffer = BufWriter::new(file);
-    let mut writer = csv::Writer::from_writer(buffer);
-
-    for record in index {
-        writer.serialize(record)?;
+    if offset > 0 {
+        let mut pos = Position::new();
+        pos.set_byte(offset);
+        reader.seek(pos)?;
     }
 
-    Ok(())
-}
-
-fn build_index_from_file() -> Result<Index, Box<dyn Error>> {
-    let file = File::open("index.csv")?;
-    let buffer = BufReader::new(file);
-    let mut reader = csv::Reader::from_reader(buffer);
-
-    let mut index = Vec::new();
-    for result in reader.deserialize() {
-        let record: IndexRecord = result?;
-        index.push(record);
-    }
-
-    Ok(index)
-}
-
-fn get_element_from_file(offset: Option<u64>, book_id: String) -> Result<Book, Box<dyn Error>> {
-    let file = File::open("books.csv")?;
-    let buffer = BufReader::new(file);
-    let mut reader = csv::Reader::from_reader(buffer);
-    let mut raw_record = csv::StringRecord::new();
-    let headers = reader.headers()?.clone();
-
-    match offset {
-        None => {}
-        Some(offset) => {
-            let mut pos = Position::new();
-            pos.set_byte(offset);
-            reader.seek(pos)?;
-        }
-    }
-
-    while reader.read_record(&mut raw_record)? {
-        let book: Book = raw_record.deserialize(Some(&headers))?;
-
+    for element in reader.deserialize() {
+        let book: Book = element?;
         if book.bookId == book_id {
             return Ok(book);
         }
     }
 
-    Err("not found".into())
+    return Err("not found".into());
 }
 
-fn find_using_index(book_id: String) -> Result<Book, Box<dyn Error>> {
-    let index = build_index_from_file().unwrap();
+fn build_and_save_index() -> Result<(), Box<dyn Error>> {
+    let mut reader = csv::Reader::from_path(BOOKS_FILE_NAME)?;
+    let mut writer = csv::Writer::from_path(INDEX_FILE_NAME)?;
+
+    let mut raw_record = csv::StringRecord::new();
     let mut offset = 0;
-    for i in index {
-        if i.bookId == book_id {
-            offset = i.offset
+    let headers = reader.headers()?.clone();
+
+    while reader.read_record(&mut raw_record)? {
+        let book: Book = raw_record.deserialize(Some(&headers))?;
+        let index_element = IndexElement {
+            bookId: book.bookId,
+            offset: offset,
+        };
+
+        writer.serialize(index_element)?;
+        offset = reader.position().byte();
+    }
+
+    Ok(())
+}
+
+fn find_in_index(book_id: String) -> Result<u64, Box<dyn Error>> {
+    let mut reader = csv::Reader::from_path(INDEX_FILE_NAME)?;
+
+    for record in reader.deserialize() {
+        let element: IndexElement = record?;
+        if element.bookId == book_id {
+            return Ok(element.offset);
         }
     }
 
-    get_element_from_file(Some(offset), book_id)
-}
-
-fn find_without_index(book_id: String) -> Result<Book, Box<dyn Error>> {
-    get_element_from_file(None, book_id)
+    return Err("not found".into());
 }
 
 fn main() {
@@ -111,7 +80,7 @@ fn main() {
     for argument in env::args() {
         if argument == "--build" {
             println!("Building index of books.csv to index.csv");
-            save_index().unwrap();
+            build_and_save_index().unwrap();
             println!("Done!");
             return;
         }
@@ -127,25 +96,10 @@ fn main() {
         return;
     }
 
-    let id = args.get(1).unwrap();
+    let book_id = args.get(1).unwrap();
 
-    println!("Finding {}...\n", id);
+    measure_and_print(&find_book, book_id.to_string(), 0).unwrap();
 
-    let now = Instant::now();
-    let res = find_without_index(id.to_string()).unwrap();
-    println!(
-        "WITHOUT INDEX RESULTS: passed as {:?} seconds too far",
-        now.elapsed().as_secs()
-    );
-    println!("===================================================");
-    println!("{:?}\n", res);
-
-    let now = Instant::now();
-    let res = find_using_index(id.to_string()).unwrap();
-    println!(
-        "WITH INDEX RESULTS: passed as {:?} seconds too far",
-        now.elapsed().as_secs()
-    );
-    println!("===============================================");
-    println!("{:?}\n", res);
+    let book_offset = find_in_index(book_id.to_string()).unwrap();
+    measure_and_print(&find_book, book_id.to_string(), book_offset).unwrap();
 }
